@@ -124,6 +124,8 @@ class Tooltip {
     constructor() {
         this._label = new St.Label({ style_class: 'gmr-tooltip', visible: false });
         this._label.clutter_text.line_wrap = true;
+        // St.Label ellipsizes by default, which wins over wrapping
+        this._label.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
         Main.layoutManager.uiGroup.add_child(this._label);
         this._source = null;
         this._build = null;
@@ -467,6 +469,7 @@ class MrIndicator extends PanelMenu.Button {
             if (hint) {
                 const h = new St.Label({ text: hint, style_class: 'gmr-field-hint' });
                 h.clutter_text.line_wrap = true;
+                h.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
                 box.add_child(h);
             }
             return box;
@@ -1103,11 +1106,13 @@ class MrIndicator extends PanelMenu.Button {
         }));
         const t = new St.Label({ text: title, style_class: 'gmr-empty-title', x_align: Clutter.ActorAlign.CENTER });
         t.clutter_text.line_wrap = true;
+        t.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
         t.clutter_text.line_alignment = Pango.Alignment.CENTER;
         box.add_child(t);
         if (body) {
             const b = new St.Label({ text: body, style_class: 'gmr-empty-body', x_align: Clutter.ActorAlign.CENTER });
             b.clutter_text.line_wrap = true;
+            b.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
             b.clutter_text.line_alignment = Pango.Alignment.CENTER;
             box.add_child(b);
         }

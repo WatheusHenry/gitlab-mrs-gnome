@@ -394,6 +394,7 @@
 }
 .gmr-empty-title {
   max-width: 376px;
+  text-align: center;
   font-size: 46px;
   font-weight: 500;
   letter-spacing: -1.84px;
@@ -401,6 +402,7 @@
 }
 .gmr-empty-body {
   margin-top: 10px;
+  text-align: center;
   max-width: 400px;
   font-size: 12px;
   letter-spacing: -0.48px;
