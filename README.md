@@ -2,6 +2,23 @@
 
 Seus merge requests abertos e os que aguardam sua revisão, direto na barra superior do GNOME.
 
+<p align="center">
+  <img src="docs/screenshots/lista.png" width="420" alt="Lista de merge requests agrupada por projeto, com filtros e status de cada MR">
+</p>
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/status.png" width="260" alt="Explicação do status ao passar o mouse e botão de copiar link"><br><sub>Status explicado no hover e copiar link</sub></td>
+    <td align="center"><img src="docs/screenshots/projetos-recolhidos.png" width="260" alt="Projetos recolhidos com a contagem de MRs"><br><sub>Projetos recolhidos e reordenáveis</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/configuracoes.png" width="260" alt="Tela de configurações dentro do popup"><br><sub>Configurações dentro do popup</sub></td>
+    <td align="center"><img src="docs/screenshots/vazio.png" width="260" alt="Estado vazio: nenhum merge request aberto"><br><sub>Sem MRs abertos</sub></td>
+  </tr>
+</table>
+
+<sub>Títulos de MRs, branches, projetos e a URL do GitLab foram borrados nas imagens.</sub>
+
 ## O que ela faz
 
 - **Lista dos seus MRs** agrupada por projeto, com busca (título, projeto, branch, autor) e filtros: Prontos, Pipeline falhou, Conflito, Threads abertas, Draft e Para revisar.
@@ -84,6 +101,7 @@ Estrutura:
 - `stylesheet.css` — estilos (St/CSS do GNOME Shell).
 - `icons/` — ícone da barra (`merge-symbolic.svg`), ícones da interface (`ui/`) e o degradê do fim da lista.
 - `fonts/` — Geist e Geist Mono (pesos 400–700).
+- `docs/screenshots/` — imagens do README.
 
 ## Créditos e licenças
 
