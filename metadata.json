@@ -1,0 +1,7 @@
+{
+  "uuid": "gitlab-mrs@matheus.sanches",
+  "name": "GitLab MRs",
+  "description": "Seus merge requests abertos e os que aguardam sua revisão, direto na barra superior.",
+  "shell-version": ["42"],
+  "version": 1
+}

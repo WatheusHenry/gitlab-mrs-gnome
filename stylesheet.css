@@ -1,0 +1,559 @@
+/* Sizes, spacing and colors follow the design prototype.
+   Typography: Geist / Geist Mono (bundled in fonts/, installed by install.sh) with -4%
+   tracking, written in px per size (St inherits letter-spacing already resolved,
+   so each size restates it). Without Geist it falls back to the system sans/mono. */
+
+/* ---------- panel ---------- */
+.gmr-panel-count {
+  font-weight: bold;
+  padding-left: 4px;
+}
+/* panel state: some pipeline failed (red) or is running (blue) */
+.gmr-panel.gmr-state-failed .system-status-icon,
+.gmr-panel.gmr-state-failed .gmr-panel-count {
+  color: #f0716a;
+}
+.gmr-panel.gmr-state-running .system-status-icon,
+.gmr-panel.gmr-state-running .gmr-panel-count {
+  color: #6fb3f2;
+}
+/* new MR to review since the popup was last opened */
+.gmr-panel-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 4px;
+  background-color: #f6c343;
+}
+
+/* ---------- popup ---------- */
+.gmr-popup .popup-menu-content {
+  padding: 0;
+  border-radius: 17px;
+  background-color: #1e1e1e;
+  border: 1px solid #414141;
+}
+.gmr-root {
+  font-family: "Geist", sans-serif;
+  font-size: 14px;
+  letter-spacing: -0.56px;
+  color: #cfcfcf;
+  width: 602px;
+  /* no bottom padding: the list runs to the popup edge, under the fade */
+  padding: 16px 14px 0;
+  spacing: 15px;
+}
+
+/* header: 82px sides keep the 380px search centered */
+.gmr-header {
+  padding: 0 4px;
+  margin-bottom: 2px;
+}
+.gmr-header-side {
+  width: 82px;
+}
+.gmr-header-actions {
+  spacing: 12px;
+}
+.gmr-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 18px;
+  background-size: cover;
+  background-color: #6e49cb;
+}
+.gmr-avatar-button {
+  border-radius: 18px;
+}
+.gmr-avatar-overlay {
+  width: 36px;
+  height: 36px;
+  border-radius: 18px;
+  background-color: rgba(0, 0, 0, 0.5);
+}
+.gmr-avatar-overlay-icon {
+  icon-size: 16px;
+}
+.gmr-avatar-letter {
+  font-weight: bold;
+  font-size: 16px;
+  letter-spacing: -0.64px;
+  color: white;
+}
+
+.gmr-icon-button {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+}
+.gmr-icon-button:hover,
+.gmr-icon-button:focus {
+  background-color: #2a2a2a;
+}
+.gmr-icon-button:active {
+  background-color: #333333;
+}
+.gmr-icon-button-icon {
+  icon-size: 17px;
+}
+
+.gmr-search {
+  width: 380px;
+  height: 36px;
+  padding: 0 11px;
+  border-radius: 11px;
+  border: 0;
+  background-color: #303030;
+  color: #e6e6e6;
+  caret-color: #e6e6e6;
+  font-size: 16px;
+  letter-spacing: -0.64px;
+}
+/* Yaru's "StEntry:hover/:focus" (orange inset ring, dark text) outranks the
+   bare class, so restate everything here. The search takes focus on open. */
+.gmr-search:hover,
+.gmr-search:focus {
+  background-color: #353535;
+  border: 0;
+  box-shadow: none;
+  color: #e6e6e6;
+}
+.gmr-search StLabel.hint-text {
+  color: #858682;
+}
+.gmr-search-icon {
+  icon-size: 15px;
+  padding-right: 10px;
+}
+
+/* filter chips */
+.gmr-chips {
+  spacing: 6px;
+}
+.gmr-chip {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 20px;
+  border: 1px solid #393939;
+  background-color: #1e1e1e;
+  color: #858682;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: -0.48px;
+}
+.gmr-chip:hover,
+.gmr-chip:focus {
+  background-color: #262626;
+  color: #a6a6a6;
+}
+.gmr-chip:checked {
+  background-color: #eeeeee;
+  border-color: #eeeeee;
+  color: #252525;
+}
+.gmr-chip-count {
+  margin-left: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: -0.48px;
+}
+
+/* list area: 762px frame - padding - header block - gap */
+.gmr-scroll {
+  width: 602px;
+  height: 635px;
+}
+/* the empty state also takes the chips' room, so the popup keeps its size */
+.gmr-empty-box {
+  height: 680px;
+}
+.gmr-list {
+  /* fixed: a short filtered list must not shrink and center */
+  width: 602px;
+  /* same as the popup's side padding (14px) once scrolled to the end */
+  padding: 0 0 14px;
+  spacing: 4px;
+}
+.gmr-fade {
+  /* #1e1e1e from transparent to opaque over 73px. A PNG because
+     St's background-gradient drew this one fully opaque. */
+  height: 73px;
+  background-image: url("icons/fade.png");
+}
+
+/* project group header (click to collapse) */
+.gmr-group {
+  border-radius: 13px;
+  /* same box open or collapsed; the right edge lines the chevron up with the time column */
+  padding: 6px 15px 6px 12px;
+  margin-bottom: 4px;
+}
+.gmr-group:hover,
+.gmr-group:focus {
+  background-color: #222222;
+}
+.gmr-group-collapsed {
+  background-color: #282828;
+  margin-bottom: 0;
+}
+.gmr-group-collapsed:hover,
+.gmr-group-collapsed:focus {
+  background-color: #2d2d2d;
+}
+/* 15px between project blocks (4px list spacing + 11px) */
+.gmr-group-spaced {
+  margin-top: 11px;
+}
+/* drag to reorder */
+.gmr-group-dragging,
+.gmr-group-dragging:hover {
+  background-color: #2f2f2f;
+}
+.gmr-drop-indicator {
+  height: 2px;
+  margin: 0 6px;
+  border-radius: 1px;
+  background-color: #858682;
+}
+.gmr-group-inner {
+  spacing: 10px;
+  /* name + namespace height, so headers without a namespace match the others */
+  min-height: 34px;
+}
+.gmr-group-name {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.64px;
+  color: #cfcfcf;
+}
+.gmr-group-path {
+  font-size: 11px;
+  letter-spacing: -0.44px;
+  color: #686b68;
+}
+.gmr-group-count {
+  min-width: 8px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background-color: #212121;
+  color: #858682;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-align: center;
+}
+.gmr-group-chevron {
+  icon-size: 14px;
+}
+
+/* MR row */
+.gmr-row {
+  border-radius: 12px;
+  padding: 7px 15px 16px 6px;
+}
+.gmr-row:hover,
+.gmr-row:focus {
+  background-color: #242424;
+}
+.gmr-row:active {
+  background-color: #292929;
+}
+.gmr-row-inner {
+  spacing: 11px;
+}
+.gmr-main {
+  spacing: 4px;
+  /* breathing room before the time column: titles ellipsize earlier */
+  padding-right: 28px;
+}
+.gmr-row-title {
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.56px;
+  color: #b4b4b4;
+}
+.gmr-branch {
+  font-family: "Geist Mono", monospace;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: -0.48px;
+  color: #737373;
+}
+
+.gmr-status {
+  width: 34px;
+  height: 34px;
+  border-radius: 17px;
+}
+/* The exported SVGs pad their glyphs differently (refresh-cw draws 12px in a
+   16px box, the warning 18px in 20px...), so each size targets a ~17px glyph. */
+.gmr-status-icon  { icon-size: 20px; }
+.gmr-status-run   .gmr-status-icon { icon-size: 22px; }
+.gmr-status-wait     .gmr-status-icon,
+.gmr-status-threads  .gmr-status-icon { icon-size: 19px; }
+.gmr-status-draft .gmr-status-icon { icon-size: 16px; }
+.gmr-status-ok    { background-color: #2e4834; }
+.gmr-status-fail  { background-color: #482f2e; }
+.gmr-status-run   { background-color: #293b46; }
+.gmr-status-wait  { background-color: #3c3523; }
+.gmr-status-conflict { background-color: #482f2e; }
+.gmr-status-threads  { background-color: #352f45; }
+.gmr-status-draft { background-color: #393a39; }
+.gmr-status-idle  { background-color: #2c2c2c; }
+
+.gmr-side {
+  /* same width for "há 5 min" and "há 2 h", so every title ends at the same x */
+  min-width: 46px;
+}
+.gmr-side-info {
+  spacing: 7px;
+}
+.gmr-side-extras {
+  spacing: 8px;
+}
+.gmr-approve-icon {
+  icon-size: 13px;
+}
+
+/* copy-link button that replaces time/approvals/comments while the row is hovered */
+.gmr-copy {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+}
+.gmr-copy:hover,
+.gmr-copy:focus {
+  background-color: #333333;
+}
+.gmr-copy:active {
+  background-color: #3a3a3a;
+}
+.gmr-copy-icon {
+  icon-size: 16px;
+}
+
+/* status explanation (lives in uiGroup, outside .gmr-root, so it sets its own font) */
+.gmr-tooltip {
+  font-family: "Geist", sans-serif;
+  font-size: 12px;
+  letter-spacing: -0.48px;
+  color: #b4b4b4;
+  background-color: #2b2b2b;
+  border: 1px solid #414141;
+  border-radius: 10px;
+  padding: 8px 10px;
+  max-width: 320px;
+}
+.gmr-time {
+  font-size: 11px;
+  letter-spacing: -0.44px;
+  color: #858682;
+}
+.gmr-notes {
+  spacing: 4px;
+  font-size: 11px;
+  letter-spacing: 0;
+  color: #858682;
+}
+.gmr-notes-icon { icon-size: 11px; }
+
+.gmr-banner {
+  spacing: 8px;
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  border-radius: 10px;
+  background-color: #3c3523;
+  color: #e2c46a;
+  font-size: 12px;
+  letter-spacing: -0.48px;
+}
+.gmr-banner-icon { icon-size: 14px; }
+
+.gmr-noresults {
+  padding: 60px 24px;
+  spacing: 4px;
+}
+.gmr-noresults-title {
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.56px;
+  color: #b4b4b4;
+}
+.gmr-noresults-body {
+  font-size: 12px;
+  letter-spacing: -0.48px;
+  color: #858682;
+}
+
+/* empty / loading / error state */
+.gmr-empty {
+  padding-bottom: 40px;
+}
+.gmr-empty-icon {
+  icon-size: 132px;
+  margin-bottom: 15px;
+}
+.gmr-empty-title {
+  max-width: 376px;
+  font-size: 46px;
+  font-weight: 500;
+  letter-spacing: -1.84px;
+  color: #2f2f2f;
+}
+.gmr-empty-body {
+  margin-top: 10px;
+  max-width: 400px;
+  font-size: 12px;
+  letter-spacing: -0.48px;
+  color: #686b68;
+}
+.gmr-action {
+  margin-top: 28px;
+  height: 36px;
+  padding: 0 12px 0 8px;
+  border-radius: 13px;
+  background-color: #dfdfdf;
+  color: #2f2f2f;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.56px;
+}
+.gmr-action:hover,
+.gmr-action:focus {
+  background-color: #ececec;
+}
+.gmr-action:active {
+  background-color: #cfcfcf;
+}
+.gmr-action-content {
+  spacing: 4px;
+}
+.gmr-action-icon {
+  icon-size: 17px;
+}
+
+/* ---------- views ---------- */
+.gmr-main-view {
+  spacing: 15px;
+}
+.gmr-view-title {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.64px;
+  color: #cfcfcf;
+}
+
+/* ---------- settings ---------- */
+/* same height as the MR view (chips 28 + gap 15 + list 635), so the popup keeps its size */
+.gmr-settings {
+  height: 678px;
+  spacing: 12px;
+  padding-bottom: 14px;
+}
+.gmr-card {
+  background-color: #282828;
+  border-radius: 13px;
+  padding: 14px;
+  spacing: 12px;
+}
+.gmr-card-title {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.56px;
+  color: #cfcfcf;
+}
+.gmr-field {
+  spacing: 6px;
+}
+.gmr-field-label {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: -0.48px;
+  color: #b4b4b4;
+}
+.gmr-field-hint {
+  font-size: 11px;
+  letter-spacing: -0.44px;
+  color: #686b68;
+}
+.gmr-setting-row {
+  spacing: 12px;
+}
+
+.gmr-input {
+  height: 36px;
+  padding: 0 11px;
+  border-radius: 11px;
+  border: 0;
+  background-color: #303030;
+  color: #e6e6e6;
+  caret-color: #e6e6e6;
+  font-size: 14px;
+  letter-spacing: -0.56px;
+}
+/* same Yaru override as the search field */
+.gmr-input:hover,
+.gmr-input:focus {
+  background-color: #353535;
+  border: 0;
+  box-shadow: none;
+  color: #e6e6e6;
+}
+.gmr-input StLabel.hint-text {
+  color: #858682;
+}
+.gmr-input StIcon {
+  icon-size: 16px;
+  color: #858682;
+}
+
+.gmr-switch {
+  width: 36px;
+  height: 20px;
+  padding: 3px;
+  border-radius: 10px;
+  background-color: #393939;
+}
+.gmr-switch:checked {
+  background-color: #dfdfdf;
+}
+.gmr-switch-knob {
+  width: 14px;
+  height: 14px;
+  border-radius: 7px;
+  background-color: #858682;
+}
+.gmr-switch:checked .gmr-switch-knob {
+  background-color: #2f2f2f;
+}
+
+.gmr-secondary {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid #393939;
+  color: #b4b4b4;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: -0.48px;
+}
+.gmr-secondary:hover,
+.gmr-secondary:focus {
+  background-color: #2f2f2f;
+}
+
+.gmr-settings-footer {
+  spacing: 12px;
+  padding: 0 2px;
+}
+.gmr-settings-status {
+  font-size: 12px;
+  letter-spacing: -0.48px;
+  color: #858682;
+}
+.gmr-settings-status.gmr-settings-error {
+  color: #dc716b;
+}
+.gmr-action.gmr-save {
+  margin-top: 0;
+  padding: 0 18px;
+}
