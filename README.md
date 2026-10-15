@@ -13,6 +13,8 @@ Seus merge requests abertos e os que aguardam sua revisão, direto na barra supe
 - **Lista dos seus MRs** agrupada por projeto, com busca (título, projeto, branch, autor) e filtros: Prontos, Pipeline falhou, Conflito, Threads abertas, Draft e Para revisar.
 - **Status de cada MR num ícone**: draft, pipeline falhou, conflito, threads abertas, pipeline rodando, pipeline aguardando, pronto para merge. Passe o mouse no ícone para ver a explicação: quais jobs falharam, quantas aprovações faltam, se há conflito com a branch de destino etc.
 - **Aprovações** (✓ / ✓✓) e número de comentários em cada MR; ao passar o mouse, um botão para copiar o link.
+- **Busca por task**: digite `843`, `#843`, `tasks#843`, `grupo/projeto#843` ou cole o link da issue para ver todos os MRs ligados a ela no GitLab, de qualquer autor e também os mergeados e fechados. As formas curtas usam o *projeto das tasks* das configurações.
+- **Agrupar por projeto ou por task** (configurações). Por task, cada grupo mostra o título da issue; o vínculo vem da referência no título do MR, do número na branch (`fix/839-…`) ou da referência na descrição, e MRs sem task ficam em “Sem task”.
 - **Projetos reordenáveis** (arraste o cabeçalho, ou Alt+↑/↓) e recolhíveis.
 - **Notificações** com botões “Abrir MR” / “Abrir pipeline”: pipeline falhou ou passou, MR aprovado, novo comentário ou thread, conflito, MR mergeado ou fechado e novo MR para revisar.
 - **Ícone da barra com estado**: vermelho se alguma pipeline sua falhou, azul enquanto alguma roda, e um ponto quando chega MR novo para revisar.
@@ -58,7 +60,7 @@ Tudo pode ser feito pela tela de configurações. Os dados ficam em `~/.config/g
 
 | Arquivo | Conteúdo |
 |---|---|
-| `config.json` | `url`, `token`, `refresh_seconds` (mínimo 30) e `notifications`. Gravado com permissão `600`. |
+| `config.json` | `url`, `token`, `refresh_seconds` (mínimo 30), `notifications`, `tasks_project` (ex.: `grupo/tasks`) e `group_by` (`project` ou `task`). Gravado com permissão `600`. |
 | `project-order.json` | Ordem dos projetos escolhida arrastando. |
 
 O token só é usado para ler dados da API do GitLab (`read_api`); a extensão não altera nada no GitLab.

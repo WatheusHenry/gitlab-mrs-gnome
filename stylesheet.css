@@ -241,6 +241,12 @@
   letter-spacing: 0;
   text-align: center;
 }
+.gmr-group-link {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+.gmr-group-link .gmr-icon-button-icon { icon-size: 14px; }
 .gmr-group-chevron {
   icon-size: 14px;
 }
@@ -299,6 +305,13 @@
 .gmr-status-threads  { background-color: #352f45; }
 .gmr-status-draft { background-color: #393a39; }
 .gmr-status-idle  { background-color: #2c2c2c; }
+.gmr-status-merged { background-color: #2e3148; }
+.gmr-status-closed { background-color: #2c2c2c; }
+.gmr-status-merged .gmr-status-icon,
+.gmr-status-closed .gmr-status-icon { icon-size: 16px; }
+
+/* merged or closed MRs (task search): still listed, in the background */
+.gmr-row-done .gmr-row-title { color: #858682; }
 
 .gmr-side {
   /* same width for "há 5 min" and "há 2 h", so every title ends at the same x */
@@ -448,7 +461,7 @@
 /* same height as the MR view (chips 28 + gap 15 + list 635), so the popup keeps its size */
 .gmr-settings {
   height: 678px;
-  spacing: 12px;
+  spacing: 8px;
   padding-bottom: 14px;
 }
 .gmr-card {
@@ -558,4 +571,38 @@
 .gmr-action.gmr-save {
   margin-top: 0;
   padding: 0 18px;
+}
+
+/* task found by the search: its title above the MRs that mention it */
+.gmr-task {
+  border-radius: 13px;
+  padding: 12px 15px 12px 14px;
+  margin-bottom: 12px;
+  background-color: #282828;
+}
+.gmr-task:hover,
+.gmr-task:focus {
+  background-color: #2d2d2d;
+}
+.gmr-task-inner {
+  spacing: 12px;
+}
+.gmr-task-ref {
+  font-family: "Geist Mono", monospace;
+  font-size: 11px;
+  letter-spacing: -0.44px;
+  color: #858682;
+  margin-bottom: 3px;
+}
+.gmr-task-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.6px;
+  color: #cfcfcf;
+}
+.gmr-task-open { icon-size: 15px; }
+
+/* settings: group by project / task */
+.gmr-segmented {
+  spacing: 6px;
 }

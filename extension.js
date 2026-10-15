@@ -15,6 +15,10 @@ const { GitLabClient, loadConfig, saveConfig, CONFIG_PATH } = Me.imports.api;
 const ORDER_PATH = GLib.build_filenamev([GLib.path_get_dirname(CONFIG_PATH), 'project-order.json']);
 const DRAG_THRESHOLD = 6;
 const AUTOSCROLL_EDGE = 48;
+// Task search: wait for the user to stop typing, then keep the answer this long.
+const TASK_DEBOUNCE_MS = 350;
+const TASK_TTL_MS = 60 * 1000;
+const NO_TASK = 'task:none';
 
 function loadProjectOrder() {
     try {
@@ -69,6 +73,10 @@ function isReady(m) {
 // One status per row, shown in the colored circle (icons/ui/status-<cls>.svg).
 // Most actionable first: draft, failed, conflict, open threads, running, waiting, then checks.
 function rowStatus(m) {
+    if (m.state === 'merged')
+        return { cls: 'merged', label: 'Mergeado' };
+    if (m.state === 'closed')
+        return { cls: 'closed', label: 'Fechado' };
     if (m.draft)
         return { cls: 'draft', label: 'Draft' };
     if (m.pipeline === 'failed')
@@ -90,6 +98,10 @@ function rowStatus(m) {
 // Tooltip lines for the status circle: everything that can block the merge.
 // failedJobs: undefined while loading, null when it could not be fetched.
 function statusDetails(m, failedJobs) {
+    if (m.state === 'merged')
+        return [`Em ${m.target} ${relTime(m.mergedAt || m.updatedAt)}`];
+    if (m.state === 'closed')
+        return [`Fechado ${relTime(m.closedAt || m.updatedAt)} sem merge`];
     const lines = [];
     const p = PIPELINE[m.pipeline];
     if (m.pipeline === 'failed') {
@@ -210,10 +222,50 @@ function splitIssuePrefix(title) {
     return m ? [m[1], m[2]] : [null, title];
 }
 
-// Title as shown in the list: "tasks#843 - Título" instead of the full issue path.
-function shortTitle(m) {
+// Title as shown in the list: "tasks#843 - Título" instead of the full issue path,
+// or just "Título" when the group header already names the task.
+function shortTitle(m, dropIssue = false) {
     const [issue, title] = splitIssuePrefix(m.title);
-    return issue ? `${issue} - ${title}` : title;
+    return issue && !dropIssue ? `${issue} - ${title}` : title;
+}
+
+function escapeRegExp(text) {
+    return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Search text naming a task -> { project, iid }: the issue link, "grupo/projeto#843",
+// or, relative to the tasks project, "tasks#843", "#843" and "843".
+function parseTaskQuery(text, tasksProject) {
+    const t = text.trim();
+    let m = t.match(/^https?:\/\/[^/\s]+\/(.+?)\/-\/(?:issues|work_items)\/(\d+)/);
+    if (m)
+        return { project: m[1], iid: Number(m[2]) };
+    m = t.match(/^([\w.-]+(?:\/[\w.-]+)+)#(\d+)$/);
+    if (m)
+        return { project: m[1], iid: Number(m[2]) };
+    m = t.match(/^(?:([\w.-]+)#|#)?(\d+)$/);
+    if (!m || !tasksProject)
+        return null;
+    if (m[1] && m[1].toLowerCase() !== tasksProject.split('/').pop().toLowerCase())
+        return null;
+    return { project: tasksProject, iid: Number(m[2]) };
+}
+
+// Task number an MR belongs to: a reference to the tasks project in the title,
+// else a number in the branch ("fix/839-...", "crm-cobranca-tasks-843"), else a
+// reference in the description. Unchecked: the caller confirms the issue exists.
+function mrTaskIid(m, tasksProject) {
+    if (!tasksProject)
+        return null;
+    const full = escapeRegExp(tasksProject);
+    const name = escapeRegExp(tasksProject.split('/').pop());
+    const ref = new RegExp(`(?:^|[^\\w./-])(?:${full}|${name})#(\\d+)|${full}/-/issues/(\\d+)`, 'i');
+    const inText = text => {
+        const r = text && text.match(ref);
+        return r ? Number(r[1] || r[2]) : null;
+    };
+    const branch = m.source && m.source.match(/(?:^|[/_-])(\d+)(?=[/_-]|$)/);
+    return inText(m.title) || (branch ? Number(branch[1]) : null) || inText(m.description);
 }
 
 function openUri(uri) {
@@ -262,6 +314,9 @@ class MrIndicator extends PanelMenu.Button {
         this._tooltip = new Tooltip();
         this._seenReview = null;
         this._failedJobs = new Map();
+        this._taskCache = new Map();
+        this._taskTimer = 0;
+        this._issues = new Map();
         this._data = null;
         this._error = null;
         this._loading = false;
@@ -321,6 +376,8 @@ class MrIndicator extends PanelMenu.Button {
         if (this._client)
             this._client.destroy();
         this._client = null;
+        this._taskCache.clear();
+        this._issues.clear();
         this._config = loadConfig();
         if (!this._config.error)
             this._client = new GitLabClient(this._config);
@@ -377,7 +434,7 @@ class MrIndicator extends PanelMenu.Button {
 
         this._search = new St.Entry({
             style_class: 'gmr-search',
-            hint_text: 'Filtrar por título, projeto, branch…',
+            hint_text: 'Filtrar por título, projeto, branch ou task…',
             can_focus: true,
             x_expand: true,
             x_align: Clutter.ActorAlign.CENTER,
@@ -514,6 +571,16 @@ class MrIndicator extends PanelMenu.Button {
             b.child.x_align = b.checked ? Clutter.ActorAlign.END : Clutter.ActorAlign.START;
         });
 
+        this._tasksEntry = entry(St.Entry, 'grupo/tasks');
+        // Segmented choice: group the list by project or by task
+        this._groupButtons = new St.BoxLayout({ style_class: 'gmr-segmented' });
+        for (const [key, text] of [['project', 'Projeto'], ['task', 'Task']]) {
+            const b = new St.Button({ style_class: 'gmr-chip', can_focus: true, label: text });
+            b.connect('clicked', () => this._setGroupChoice(key));
+            b._groupKey = key;
+            this._groupButtons.add_child(b);
+        }
+
         const resetOrder = new St.Button({ style_class: 'gmr-secondary', can_focus: true, label: 'Restaurar' });
         resetOrder.connect('clicked', () => {
             this._projectOrder = [];
@@ -529,6 +596,9 @@ class MrIndicator extends PanelMenu.Button {
             field('Atualizar a cada (segundos)', this._intervalEntry, 'Mínimo de 30 segundos.'),
             row('Notificações', 'Pipeline, aprovações e novos MRs para revisar', this._notifySwitch)));
         view.add_child(card('Lista',
+            row('Agrupar por', '', this._groupButtons),
+            field('Projeto das tasks', this._tasksEntry,
+                'Onde ficam as issues das tasks. Permite buscar por 843, #843, tasks#843 ou pelo link da issue.'),
             row('Ordem dos projetos', 'Volta a ordenar pelo MR atualizado mais recentemente', resetOrder)));
 
         const footer = new St.BoxLayout({ style_class: 'gmr-settings-footer', y_expand: true, y_align: Clutter.ActorAlign.END });
@@ -566,8 +636,20 @@ class MrIndicator extends PanelMenu.Button {
         this._intervalEntry.set_text(String(cfg.refresh_seconds));
         this._notifySwitch.checked = Boolean(cfg.notifications);
         this._notifySwitch.child.x_align = cfg.notifications ? Clutter.ActorAlign.END : Clutter.ActorAlign.START;
+        this._tasksEntry.set_text(cfg.tasks_project || '');
+        this._setGroupChoice(cfg.group_by === 'task' ? 'task' : 'project');
         this._setSettingsStatus('', false);
         this._urlEntry.grab_key_focus();
+    }
+
+    _setGroupChoice(key) {
+        this._groupChoice = key;
+        for (const b of this._groupButtons.get_children()) {
+            if (b._groupKey === key)
+                b.add_style_pseudo_class('checked');
+            else
+                b.remove_style_pseudo_class('checked');
+        }
     }
 
     _setSettingsStatus(text, isError) {
@@ -582,6 +664,9 @@ class MrIndicator extends PanelMenu.Button {
         const url = this._urlEntry.get_text().trim().replace(/\/+$/, '');
         const token = this._tokenEntry.get_text().trim();
         const seconds = Number(this._intervalEntry.get_text().trim());
+        // Accepts the project link too: "https://host/grupo/tasks/-/issues" -> "grupo/tasks"
+        const tasksProject = this._tasksEntry.get_text().trim()
+            .replace(/^https?:\/\/[^/]+\//, '').replace(/\/-\/.*$/, '').replace(/^\/+|\/+$/g, '');
         if (!/^https?:\/\/\S+$/.test(url)) {
             this._setSettingsStatus('Informe uma URL válida (https://…)', true);
             return;
@@ -594,9 +679,24 @@ class MrIndicator extends PanelMenu.Button {
             this._setSettingsStatus('O intervalo mínimo é 30 segundos', true);
             return;
         }
+        if (tasksProject && !/^[\w.-]+(\/[\w.-]+)+$/.test(tasksProject)) {
+            this._setSettingsStatus('Projeto das tasks no formato grupo/projeto', true);
+            return;
+        }
+        if (this._groupChoice === 'task' && !tasksProject) {
+            this._setSettingsStatus('Informe o projeto das tasks para agrupar por task', true);
+            return;
+        }
         const before = loadConfig();
         try {
-            saveConfig({ url, token, refresh_seconds: Math.round(seconds), notifications: this._notifySwitch.checked });
+            saveConfig({
+                url,
+                token,
+                refresh_seconds: Math.round(seconds),
+                notifications: this._notifySwitch.checked,
+                tasks_project: tasksProject,
+                group_by: this._groupChoice,
+            });
         } catch (e) {
             this._setSettingsStatus(`Não foi possível salvar: ${e.message}`, true);
             return;
@@ -848,7 +948,15 @@ class MrIndicator extends PanelMenu.Button {
 
     _renderList() {
         this._list.destroy_all_children();
+        this._blocks = [];
         const all = this._items();
+        const task = this._client ? parseTaskQuery(this._query, this._config.tasks_project) : null;
+        if (task) {
+            this._chips.visible = false;
+            this._refreshButton.visible = true;
+            this._renderTaskSearch(task);
+            return;
+        }
         this._renderChips(all);
         // With nothing listed, the empty state carries its own "Atualizar" button.
         this._refreshButton.visible = all.length > 0;
@@ -882,32 +990,211 @@ class MrIndicator extends PanelMenu.Button {
             [m.title, m.project, m.source, m.target, m.ref, m.author].some(s => s && s.toLowerCase().includes(q)));
 
         if (items.length === 0) {
-            const none = new St.BoxLayout({ vertical: true, style_class: 'gmr-noresults', x_expand: true });
-            none.add_child(new St.Label({ text: 'Nenhum resultado', style_class: 'gmr-noresults-title', x_align: Clutter.ActorAlign.CENTER }));
-            none.add_child(new St.Label({ text: 'Ajuste a busca ou o filtro.', style_class: 'gmr-noresults-body', x_align: Clutter.ActorAlign.CENTER }));
-            this._list.add_child(none);
+            this._listMessage('Nenhum resultado', 'Ajuste a busca ou o filtro.');
             return;
         }
 
-        // group by project, in the user's order (MRs inside by most recent update)
-        const groups = this._groupByProject(items);
-        this._blocks = [];
-        for (const project of this._orderProjects([...groups.keys()])) {
-            const mrs = groups.get(project);
-            const collapsed = this._collapsed.has(project);
-            const header = this._groupHeader(project, mrs, collapsed);
+        const byTask = this._config.group_by === 'task' && this._config.tasks_project;
+        this._renderGroups(byTask ? this._taskGroups(items) : this._projectGroups(items), { inTask: byTask });
+    }
+
+    _listMessage(title, body) {
+        const box = new St.BoxLayout({ vertical: true, style_class: 'gmr-noresults', x_expand: true });
+        box.add_child(new St.Label({ text: title, style_class: 'gmr-noresults-title', x_align: Clutter.ActorAlign.CENTER }));
+        if (body) {
+            const b = new St.Label({ text: body, style_class: 'gmr-noresults-body', x_align: Clutter.ActorAlign.CENTER });
+            b.clutter_text.line_wrap = true;
+            b.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
+            b.clutter_text.line_alignment = Pango.Alignment.CENTER;
+            box.add_child(b);
+        }
+        this._list.add_child(box);
+    }
+
+    // groups: [{ key, name, path, url, reorderable, mrs }], already in display order.
+    _renderGroups(groups, rowOpts) {
+        for (const g of groups) {
+            const collapsed = this._collapsed.has(g.key);
+            const header = this._groupHeader(g, collapsed);
             if (this._blocks.length)
                 header.add_style_class_name('gmr-group-spaced');
             this._list.add_child(header);
-            const block = { project, header, last: header };
+            const block = { project: g.key, header, last: header };
             if (!collapsed) {
-                for (const m of mrs) {
-                    block.last = this._row(m);
+                for (const m of g.mrs) {
+                    block.last = this._row(m, rowOpts);
                     this._list.add_child(block.last);
                 }
             }
             this._blocks.push(block);
         }
+    }
+
+    // By project, in the user's order (MRs inside by most recent update).
+    _projectGroups(items) {
+        const groups = this._groupByProject(items);
+        return this._orderProjects([...groups.keys()]).map(project => {
+            const mrs = groups.get(project);
+            return {
+                key: project,
+                name: mrs[0].projectShort,
+                path: project.split('/').slice(0, -2).join('/'),
+                reorderable: true,
+                mrs,
+            };
+        });
+    }
+
+    // By task, most recently updated first and "Sem task" last. A number taken from
+    // the MR only counts once its issue is known to exist in the tasks project.
+    _taskGroups(items) {
+        const tasksProject = this._config.tasks_project;
+        const shortRef = `${tasksProject.split('/').pop()}#`;
+        const groups = new Map();
+        const pending = [];
+        for (const m of [...items].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))) {
+            let iid = mrTaskIid(m, tasksProject);
+            if (iid && !this._issues.has(iid))
+                pending.push(iid);
+            if (iid && this._issues.get(iid) === null)
+                iid = null;
+            const key = iid ? `task:${iid}` : NO_TASK;
+            if (!groups.has(key)) {
+                const issue = iid && this._issues.get(iid);
+                groups.set(key, iid ? {
+                    key,
+                    name: issue ? issue.title : `${shortRef}${iid}`,
+                    path: issue ? `${shortRef}${iid}${issue.state === 'closed' ? ' · fechada' : ''}` : '',
+                    url: issue ? issue.url : null,
+                    mrs: [],
+                } : { key, name: 'Sem task', path: '', mrs: [] });
+            }
+            groups.get(key).mrs.push(m);
+        }
+        this._loadIssues([...new Set(pending)]);
+        const list = [...groups.values()];
+        return [...list.filter(g => g.key !== NO_TASK), ...list.filter(g => g.key === NO_TASK)];
+    }
+
+    // Title and state of the tasks shown as groups; one request per task, kept
+    // until the next forced refresh. null marks a number that is not a task.
+    _loadIssues(iids) {
+        if (!iids.length || !this._client)
+            return;
+        const client = this._client;
+        const project = this._config.tasks_project;
+        for (const iid of iids)
+            this._issues.set(iid, undefined);
+        Promise.all(iids.map(iid => client.issue(project, iid)
+            .then(i => this._issues.set(iid, { title: i.title, state: i.state, url: i.web_url }))
+            .catch(e => {
+                // Not found: the number in the branch was something else.
+                // Any other failure: try again on the next render.
+                if (/\(404\)/.test(e.message))
+                    this._issues.set(iid, null);
+                else
+                    this._issues.delete(iid);
+            })))
+            .then(() => {
+                if (client === this._client && this.menu.isOpen)
+                    this._renderList();
+            });
+    }
+
+    // ---------- task search ----------
+
+    _renderTaskSearch(task) {
+        const key = `${task.project}#${task.iid}`;
+        const entry = this._taskCache.get(key);
+        if (!entry || (!entry.loading && Date.now() - entry.at > TASK_TTL_MS))
+            this._scheduleTaskFetch(task, key);
+        else if (this._taskTimer) {
+            GLib.source_remove(this._taskTimer);
+            this._taskTimer = 0;
+        }
+        this._showEmpty(null);
+
+        const data = entry && entry.data;
+        if (!data) {
+            if (entry && entry.error)
+                this._listMessage(`Não foi possível buscar ${key}`, entry.error);
+            else
+                this._listMessage(`Buscando MRs de ${key}…`, '');
+            return;
+        }
+        this._list.add_child(this._taskCard(data));
+        if (data.mrs.length === 0) {
+            this._listMessage('Nenhum MR vinculado a esta task', 'O GitLab liga o MR à task quando ele a menciona no título, na descrição ou num comentário.');
+            return;
+        }
+        // by project; inside, open MRs first, then by most recent update
+        this._renderGroups(this._projectGroups(data.mrs).map(g => ({
+            ...g,
+            key: `search:${g.key}`,
+            reorderable: false,
+            mrs: [...g.mrs].sort((a, b) => (a.state === 'opened' ? 0 : 1) - (b.state === 'opened' ? 0 : 1)),
+        })), {});
+    }
+
+    _scheduleTaskFetch(task, key) {
+        if (this._taskTimer)
+            GLib.source_remove(this._taskTimer);
+        this._taskTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, TASK_DEBOUNCE_MS, () => {
+            this._taskTimer = 0;
+            this._fetchTask(task, key);
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    async _fetchTask(task, key) {
+        const client = this._client;
+        if (!client)
+            return;
+        const entry = { ...this._taskCache.get(key), loading: true };
+        this._taskCache.set(key, entry);
+        try {
+            entry.data = await client.taskMergeRequests(task.project, task.iid);
+            entry.error = null;
+        } catch (e) {
+            entry.error = /\(404\)/.test(e.message) ? 'Task não encontrada ou sem acesso.' : e.message;
+        }
+        entry.loading = false;
+        entry.at = Date.now();
+        if (client !== this._client)
+            return;
+        const now = parseTaskQuery(this._query, this._config.tasks_project);
+        if (now && `${now.project}#${now.iid}` === key)
+            this._renderList();
+    }
+
+    // Task header above the search results; click opens the issue.
+    _taskCard(t) {
+        const box = new St.BoxLayout({ style_class: 'gmr-task-inner', x_expand: true });
+        const texts = new St.BoxLayout({ vertical: true, x_expand: true, y_align: Clutter.ActorAlign.CENTER });
+        const meta = label('', 'gmr-task-ref');
+        const esc = s => GLib.markup_escape_text(s, -1);
+        const open = t.mrs.filter(m => m.state === 'opened').length;
+        meta.clutter_text.set_markup(`${esc(t.ref)}  ·  ${t.state === 'closed' ? 'fechada' : 'aberta'}` +
+            `  ·  ${t.mrs.length} MR${t.mrs.length === 1 ? '' : 's'}${open && open < t.mrs.length ? `, ${open} aberto${open === 1 ? '' : 's'}` : ''}`);
+        texts.add_child(meta);
+        const title = new St.Label({ text: t.title, style_class: 'gmr-task-title' });
+        title.clutter_text.line_wrap = true;
+        title.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
+        texts.add_child(title);
+        box.add_child(texts);
+        box.add_child(new St.Icon({ gicon: asset('browser'), style_class: 'gmr-task-open', y_align: Clutter.ActorAlign.CENTER }));
+        const button = new St.Button({
+            style_class: 'gmr-task',
+            x_expand: true,
+            can_focus: true,
+            accessible_name: `Abrir ${t.ref} no GitLab`,
+            child: box,
+        });
+        button.connect('clicked', () => {
+            this.menu.close();
+            openUri(t.url);
+        });
+        return button;
     }
 
     // Map project -> MRs, most recently updated project first.
@@ -1056,14 +1343,22 @@ class MrIndicator extends PanelMenu.Button {
         });
     }
 
-    _groupHeader(project, mrs, collapsed) {
+    _groupHeader(group, collapsed) {
+        const { key, mrs } = group;
         const box = new St.BoxLayout({ x_expand: true, style_class: 'gmr-group-inner' });
         const names = new St.BoxLayout({ vertical: true, x_expand: true, y_align: Clutter.ActorAlign.CENTER });
-        names.add_child(label(mrs[0].projectShort, 'gmr-group-name'));
-        const ns = project.split('/').slice(0, -2).join('/');
-        if (ns)
-            names.add_child(label(ns, 'gmr-group-path'));
+        names.add_child(label(group.name, 'gmr-group-name'));
+        if (group.path)
+            names.add_child(label(group.path, 'gmr-group-path'));
         box.add_child(names);
+        if (group.url) {
+            const link = iconButton('browser', 'Abrir a task no GitLab', () => {
+                this.menu.close();
+                openUri(group.url);
+            });
+            link.add_style_class_name('gmr-group-link');
+            box.add_child(link);
+        }
         if (collapsed)
             box.add_child(new St.Label({ text: String(mrs.length), style_class: 'gmr-group-count', y_align: Clutter.ActorAlign.CENTER }));
         box.add_child(new St.Icon({
@@ -1076,19 +1371,20 @@ class MrIndicator extends PanelMenu.Button {
             style_class: collapsed ? 'gmr-group gmr-group-collapsed' : 'gmr-group',
             x_expand: true,
             can_focus: true,
-            accessible_name: collapsed ? `Expandir ${project}` : `Recolher ${project}`,
+            accessible_name: collapsed ? `Expandir ${group.name}` : `Recolher ${group.name}`,
             child: box,
         });
         button.connect('clicked', () => {
             if (this._suppressClick)
                 return;
             if (collapsed)
-                this._collapsed.delete(project);
+                this._collapsed.delete(key);
             else
-                this._collapsed.add(project);
+                this._collapsed.add(key);
             this._renderList();
         });
-        this._makeReorderable(button, project);
+        if (group.reorderable)
+            this._makeReorderable(button, key);
         return button;
     }
 
@@ -1135,7 +1431,8 @@ class MrIndicator extends PanelMenu.Button {
         return box;
     }
 
-    _row(m) {
+    // opts.inTask: the group header names the task, so the row names the project.
+    _row(m, opts = {}) {
         const s = rowStatus(m);
         const row = new St.BoxLayout({ style_class: 'gmr-row-inner', x_expand: true });
 
@@ -1166,12 +1463,16 @@ class MrIndicator extends PanelMenu.Button {
 
         // main column
         const main = new St.BoxLayout({ vertical: true, x_expand: true, style_class: 'gmr-main' });
-        main.add_child(label(`${m.ref} - ${shortTitle(m)}`, 'gmr-row-title'));
+        main.add_child(label(`${m.ref} - ${shortTitle(m, opts.inTask)}`, 'gmr-row-title'));
 
         const esc = t => GLib.markup_escape_text(t, -1);
         const meta = label('', 'gmr-branch');
         let markup = `<u>${esc(m.source)}</u>  <span foreground="#4e4e4e">para</span>  <u>${esc(m.target)}</u>`;
-        if (m.forReview)
+        if (opts.inTask)
+            markup = `<span font_family="Geist">${esc(m.projectShort)}</span>  <span foreground="#4e4e4e">·</span>  ${markup}`;
+        // author of MRs that aren't mine (to review, or found by task search)
+        const me = this._data && this._data.user ? this._data.user.username : null;
+        if (m.forReview || (me && m.authorUsername && m.authorUsername !== me))
             markup += `  <span foreground="#4e4e4e">·</span>  <span font_family="Geist">${esc(m.author)}</span>`;
         meta.clutter_text.set_markup(markup);
         main.add_child(meta);
@@ -1180,7 +1481,7 @@ class MrIndicator extends PanelMenu.Button {
         // right column: time + approvals + comments; on hover, a copy-link button instead
         const side = new St.BoxLayout({ vertical: true, style_class: 'gmr-side', y_align: Clutter.ActorAlign.START });
         const info = new St.BoxLayout({ vertical: true, style_class: 'gmr-side-info', x_align: Clutter.ActorAlign.END, y_align: Clutter.ActorAlign.START });
-        info.add_child(new St.Label({ text: relTime(m.updatedAt), style_class: 'gmr-time', x_align: Clutter.ActorAlign.END }));
+        info.add_child(new St.Label({ text: relTime(m.mergedAt || m.closedAt || m.updatedAt), style_class: 'gmr-time', x_align: Clutter.ActorAlign.END }));
         const extras = new St.BoxLayout({ style_class: 'gmr-side-extras', x_align: Clutter.ActorAlign.END });
         const approved = m.approvedBy.length;
         if (approved) {
@@ -1222,7 +1523,8 @@ class MrIndicator extends PanelMenu.Button {
         side.add_child(copy);
         row.add_child(side);
 
-        const button = new St.Button({ style_class: 'gmr-row', x_expand: true, can_focus: true, child: row });
+        const done = m.state === 'merged' || m.state === 'closed';
+        const button = new St.Button({ style_class: done ? 'gmr-row gmr-row-done' : 'gmr-row', x_expand: true, can_focus: true, child: row });
         button.connect('clicked', () => {
             this.menu.close();
             openUri(m.url);
@@ -1260,6 +1562,9 @@ class MrIndicator extends PanelMenu.Button {
 
     destroy() {
         this._endDrag(false);
+        if (this._taskTimer)
+            GLib.source_remove(this._taskTimer);
+        this._taskTimer = 0;
         this._tooltip.destroy();
         if (this._timerId)
             GLib.source_remove(this._timerId);

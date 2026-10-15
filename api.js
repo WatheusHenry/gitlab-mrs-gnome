@@ -7,7 +7,7 @@ const { Gio, GLib, Soup } = imports.gi;
 var CONFIG_PATH = GLib.build_filenamev([GLib.get_user_config_dir(), 'gitlab-mrs', 'config.json']);
 var CACHE_DIR = GLib.build_filenamev([GLib.get_user_cache_dir(), 'gitlab-mrs']);
 
-const DEFAULTS = { url: 'https://gitlab.com', token: '', refresh_seconds: 120, notifications: true };
+const DEFAULTS = { url: 'https://gitlab.com', token: '', refresh_seconds: 120, notifications: true, tasks_project: '' };
 
 function loadConfig() {
     let raw;
@@ -20,6 +20,7 @@ function loadConfig() {
     const cfg = { ...DEFAULTS, ...raw };
     cfg.url = String(cfg.url).replace(/\/+$/, '').replace(/\/api\/v4$/, '');
     cfg.refresh_seconds = Math.max(30, Number(cfg.refresh_seconds) || DEFAULTS.refresh_seconds);
+    cfg.tasks_project = String(cfg.tasks_project || '').trim().replace(/^\/+|\/+$/g, '');
     if (!cfg.token)
         cfg.error = `Defina "token" em ${CONFIG_PATH}`;
     return cfg;
@@ -48,6 +49,8 @@ function httpError(msg) {
         return 'Token inválido ou expirado (401)';
     if (code === 403)
         return 'Sem permissão para acessar a API (403)';
+    if (code === 404)
+        return 'Não encontrado no GitLab (404)';
     if (code < 100)
         return 'Sem conexão com o GitLab';
     return `GitLab respondeu HTTP ${code}`;
@@ -115,15 +118,10 @@ var GitLabClient = class {
         }
     }
 
-    async _enrich(mr) {
-        const base = `/projects/${mr.project_id}/merge_requests/${mr.iid}`;
-        const [detail, approvals] = await Promise.all([
-            this._json(base).catch(() => null),
-            this._json(`${base}/approvals`).catch(() => null),
-        ]);
+    // Fields that come with the MR listing itself, no extra request.
+    _summary(mr) {
         const fullRef = (mr.references && mr.references.full) || `${mr.project_id}!${mr.iid}`;
         const project = fullRef.split('!')[0];
-        const pipeline = detail && detail.head_pipeline;
         return {
             id: mr.id,
             projectId: mr.project_id,
@@ -136,13 +134,37 @@ var GitLabClient = class {
             url: mr.web_url,
             source: mr.source_branch,
             target: mr.target_branch,
+            state: mr.state,
+            description: mr.description || '',
             createdAt: mr.created_at,
             updatedAt: mr.updated_at,
+            mergedAt: mr.merged_at || null,
+            closedAt: mr.closed_at || null,
             author: mr.author ? mr.author.name : '',
             authorUsername: mr.author ? mr.author.username : '',
             notes: mr.user_notes_count || 0,
             conflicts: Boolean(mr.has_conflicts),
             threadsOpen: mr.blocking_discussions_resolved === false,
+            pipeline: null,
+            pipelineUrl: null,
+            pipelineId: null,
+            mergeStatus: mr.detailed_merge_status || mr.merge_status,
+            approvedBy: [],
+            approvalsLeft: 0,
+            approvalsRequired: 0,
+        };
+    }
+
+    // Summary plus pipeline and approvals (two requests per MR).
+    async _enrich(mr) {
+        const base = `/projects/${mr.project_id}/merge_requests/${mr.iid}`;
+        const [detail, approvals] = await Promise.all([
+            this._json(base).catch(() => null),
+            this._json(`${base}/approvals`).catch(() => null),
+        ]);
+        const pipeline = detail && detail.head_pipeline;
+        return {
+            ...this._summary(mr),
             pipeline: pipeline ? pipeline.status : null,
             pipelineUrl: pipeline ? pipeline.web_url : null,
             pipelineId: pipeline ? pipeline.id : null,
@@ -151,6 +173,29 @@ var GitLabClient = class {
                 ? approvals.approved_by.map(a => a.user.name) : [],
             approvalsLeft: approvals ? approvals.approvals_left || 0 : 0,
             approvalsRequired: approvals ? approvals.approvals_required || 0 : 0,
+        };
+    }
+
+    issue(project, iid) {
+        return this._json(`/projects/${encodeURIComponent(project)}/issues/${iid}`);
+    }
+
+    // A task (issue) and every MR that mentions or closes it, from any author and
+    // in any state. Only open MRs get pipeline and approvals.
+    async taskMergeRequests(project, iid) {
+        const base = `/projects/${encodeURIComponent(project)}/issues/${iid}`;
+        const [issue, related] = await Promise.all([
+            this.issue(project, iid),
+            this._json(`${base}/related_merge_requests?per_page=100`),
+        ]);
+        const mrs = await Promise.all(related.map(m =>
+            m.state === 'opened' ? this._enrich(m) : this._summary(m)));
+        return {
+            title: issue.title,
+            state: issue.state,
+            url: issue.web_url,
+            ref: (issue.references && issue.references.full) || `${project}#${iid}`,
+            mrs,
         };
     }
 
