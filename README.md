@@ -41,14 +41,14 @@ Seus merge requests abertos e os que aguardam sua revisão, direto na barra supe
 ### Pelo repositório
 
 ```bash
-git clone https://github.com/SEU_USUARIO/gitlab-mrs-gnome.git
+git clone https://github.com/watheushenry/gitlab-mrs-gnome.git
 cd gitlab-mrs-gnome
 bash install.sh
 ```
 
 ### Pelo zip
 
-Baixe o `gitlab-mrs@matheus.sanches.shell-extension.zip` da página de releases e rode:
+Baixe o `gitlab-mrs@matheus.sanches.shell-extension.zip` da [página de releases](https://github.com/watheushenry/gitlab-mrs-gnome/releases) e rode:
 
 ```bash
 mkdir gitlab-mrs && unzip gitlab-mrs@matheus.sanches.shell-extension.zip -d gitlab-mrs
